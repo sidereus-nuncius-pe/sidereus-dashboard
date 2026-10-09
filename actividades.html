@@ -12,6 +12,7 @@
         .matrix-table th { background: var(--bg-inset); font-weight: 600; }
         .matrix-table td:first-child, .matrix-table th:first-child { text-align: left; color: var(--ink-dim); font-weight: 600; white-space: nowrap; }
         .matrix-cell-hit { background: var(--accent-soft); color: var(--accent); font-weight: 700; border-radius: 6px; }
+        .metric-counter.pending-tasks { background: var(--gold-soft); color: var(--gold); }
     </style>
 </head>
 <body>
@@ -128,7 +129,7 @@
     }
 
     function processCSVMetrics(data) {
-        teamList.forEach(member => { globalMetrics[member] = { active: 0, completed: 0 }; });
+        teamList.forEach(member => { globalMetrics[member] = { active: 0, pending: 0, completed: 0 }; });
 
         data.forEach(row => {
             const resp = row.Responsable ? row.Responsable.trim() : "";
@@ -137,11 +138,14 @@
             if (globalMetrics[resp]) {
                 const isComp = (status === "completado" || status === "completed" || status === "finalizado");
                 const isActive = (status === "activo" || status === "active" || status === "en progreso");
+                const isPending = (status === "pendiente" || status === "pending");
 
                 if (isComp) {
                     globalMetrics[resp].completed += 1;
                 } else if (isActive) {
                     globalMetrics[resp].active += 1;
+                } else if (isPending) {
+                    globalMetrics[resp].pending += 1;
                 }
             }
         });
@@ -285,13 +289,15 @@
 
         teamList.forEach(member => {
             const activeCount = globalMetrics[member].active;
+            const pendingCount = globalMetrics[member].pending;
             const completedCount = globalMetrics[member].completed;
-            const isInactive = (activeCount === 0 && completedCount === 0);
+            const isInactive = (activeCount === 0 && pendingCount === 0 && completedCount === 0);
 
             currentHTML += `
                 <div class="member-metrics-row ${isInactive ? 'inactive-member' : ''}">
                     <div class="member-name-tag">${member}</div>
                     <div class="metric-counter active-tasks">${activeCount} Activas</div>
+                    <div class="metric-counter pending-tasks">${pendingCount} Pendientes</div>
                     <div class="metric-counter completed-tasks">${completedCount} Logradas</div>
                 </div>`;
         });
@@ -301,14 +307,15 @@
 
     function exportContributionReport() {
         let csvContent = "data:text/csv;charset=utf-8,";
-        csvContent += "Miembro,Actividades Activas,Actividades Completadas,Nivel de Contribucion\n";
+        csvContent += "Miembro,Actividades Activas,Actividades Pendientes,Actividades Completadas,Nivel de Contribucion\n";
         teamList.forEach(member => {
             const act = globalMetrics[member].active;
+            const pend = globalMetrics[member].pending;
             const comp = globalMetrics[member].completed;
             let level = "Estable";
             if (comp > 3) level = "Alto Impacto";
-            if (act === 0 && comp === 0) level = "Inactivo";
-            csvContent += `"${member}",${act},${comp},"${level}"\n`;
+            if (act === 0 && pend === 0 && comp === 0) level = "Inactivo";
+            csvContent += `"${member}",${act},${pend},${comp},"${level}"\n`;
         });
         const encodedUri = encodeURI(csvContent);
         const link = document.createElement("a");
@@ -331,8 +338,10 @@
                 headers.forEach(h => {
                     let val = row[h] ? row[h].trim() : '';
                     if (h.toLowerCase() === 'estado') {
-                        let isComp = (val.toLowerCase() === 'completado' || val.toLowerCase() === 'completed');
-                        let cls = isComp ? 'badge-completed' : 'badge-active';
+                        let v = val.toLowerCase();
+                        let cls = (v === 'completado' || v === 'completed') ? 'badge-completed'
+                                : (v === 'pendiente' || v === 'pending') ? 'badge-warn'
+                                : 'badge-active';
                         html += `<td><span class="badge ${cls}">${val}</span></td>`;
                     } else if (h.toLowerCase() === 'escalar') {
                         if (val) {
